@@ -118,6 +118,7 @@
   @media(max-width:760px){#panel{width:100%;max-width:100%;height:68%;top:auto;bottom:0;border-left:none;
     border-top:1px solid var(--panelb);border-radius:18px 18px 0 0;transform:translateY(100%)}
     #panel.open{transform:translateY(0)}#foot{max-width:80%}}
+.mbtag{display:inline-block;font-size:9.5px;font-weight:800;padding:1px 6px;border-radius:999px;background:#1b2a10;color:var(--leaf);border:1px solid var(--panelb);margin-left:4px;vertical-align:middle}.mbtag.bdy{background:#2a2410;color:var(--gold);border-color:#4a3f18}.msnip{font-size:11.5px;color:#A8C39A;margin-top:4px;line-height:1.5}.msnip b{color:var(--leaf);font-weight:800;background:rgba(154,211,107,.14)}.srchbar{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:8px 10px;margin-bottom:6px;border-bottom:1px solid var(--panelb);position:sticky;top:0;background:var(--panel);z-index:3}.srchbar>span{font-size:11.5px;color:var(--sub);font-weight:600}.srchbar button{cursor:pointer;font-size:11.5px;font-weight:800;padding:6px 11px;border-radius:999px;border:1px solid var(--green);background:#14200f;color:var(--leaf)}.srchbar button:hover{background:#1b2a10}.srchbar button:disabled{opacity:.6;cursor:default}.srchbar .bdone{font-size:11px;color:var(--gold);font-weight:700}
 </style>
 </head>
 <body>
@@ -131,7 +132,7 @@
         <path d="M12 6 q5 -1 5 3 q-4 1 -5 -3z" fill="#B6E36B"/></svg>
       <h1>모소밤부 <span>UNIVERSE</span></h1>
     </div>
-    <input id="search" placeholder="🔍  주제·키워드로 글 찾기">
+    <input id="search" placeholder="🔍 제목·내용으로 글 검색">
     <button class="hbtn" id="levelbtn">🏅<span> 내 레벨</span></button>
     <button class="hbtn" id="boxbtn">📥<span> 보관함</span></button>
     <button class="hbtn" id="hotbtn">🔥<span>추천글</span></button>
@@ -280,8 +281,32 @@ function doSearch(){const q=searchEl.value.trim().toLowerCase();if(!q){selId=nul
   const hot=new Set();NODES.forEach(n=>{if(n.kind==='thesis'){if(mt(n.label)||(n.posts&&n.posts.some(p=>mt(p.t))))hot.add(n.id);}else if(mt(n.label))hot.add(n.id);});
   selId='__search';highlight(hot.size?hot:new Set());
   openPanel();crumb.textContent='검색';ptitle.textContent='"'+searchEl.value.trim()+'"';
-  pcount.textContent=res.length.toLocaleString()+'편 발견 · 그래프에서 '+hot.size+'개 테제 강조';
-  plist.innerHTML=res.length?res.slice(0,150).map(p=>itemHTML(p,p.d+(p.v?' · 조회 '+p.v.toLocaleString():'')+' · '+esc(domName(p.di))+' › '+esc(p.th))).join(''):'<div style="padding:24px;color:var(--sub);text-align:center">검색 결과가 없습니다.</div>';}
+  pcount.textContent=res.length.toLocaleString()+'편(제목 일치) · 그래프 '+hot.size+'개 테제 강조';
+  __titleRes=res;__curQ=searchEl.value.trim();__sumRes=[];__fullRes=[];renderSearch();augmentSummary();}
+
+/* ---- 본문/요약 하이브리드 검색 ---- */
+let __titleRes=[],__sumRes=[],__fullRes=[],__curQ='';
+let SUM=null,SUMBYID=null,FULL=null;
+const MAPBYID={};allPosts.forEach(function(p){var id=pidOf(p.u);if(id&&!MAPBYID[id])MAPBYID[id]=p;});
+function pidOf(u){var m=(u||'').match(/(\d{6,})/);return m?m[1]:'';}
+var __DUP=/([가-힣])\1/g;
+function mbNorm(s){s=(s||'').toLowerCase();var p=null;while(p!==s){p=s;s=s.replace(__DUP,'$1');}return s.replace(/\s+/g,'');}
+function mbTerms(q){return (q||'').toLowerCase().split(/\s+/).map(function(t){return mbNorm(t);}).filter(Boolean);}
+function loadSummary(){if(SUM)return Promise.resolve(SUM);if(window.__sumP)return window.__sumP;window.__sumP=fetch('search-summary.json').then(function(r){return r.json();}).then(function(j){SUM=j.posts;SUMBYID={};SUM.forEach(function(a){SUMBYID[a[0]]={d:a[1],c:a[2],t:a[3],s:a[4],n:mbNorm(a[3]+' '+a[4])};});return SUM;});return window.__sumP;}
+function loadFull(){if(FULL)return Promise.resolve(FULL);if(window.__fullP)return window.__fullP;window.__fullP=fetch('ft-manifest.json').then(function(r){return r.json();}).then(function(m){return Promise.all(m.files.map(function(f){return fetch(f).then(function(r){return r.json();});}));}).then(function(arrs){FULL={};arrs.forEach(function(j){j.posts.forEach(function(a){FULL[a[0]]={b:a[1],n:mbNorm(a[1])};});});return FULL;});return window.__fullP;}
+function searchSummary(){var ts=mbTerms(__curQ);__sumRes=[];if(!ts.length||!SUMBYID)return;var out=[];for(var id in SUMBYID){var o=SUMBYID[id];var ok=true;for(var i=0;i<ts.length;i++){if(o.n.indexOf(ts[i])<0){ok=false;break;}}if(ok)out.push({id:id,date:o.d,cat:o.c,summ:o.s});}out.sort(function(a,b){return a.date<b.date?1:-1;});__sumRes=out.slice(0,200);}
+function searchFull(){var ts=mbTerms(__curQ);__fullRes=[];if(!ts.length||!FULL)return;var out=[];for(var id in FULL){var o=FULL[id];var ok=true;for(var i=0;i<ts.length;i++){if(o.n.indexOf(ts[i])<0){ok=false;break;}}if(ok){var m=SUMBYID&&SUMBYID[id];out.push({id:id,body:o.b,date:m?m.d:'',cat:m?m.c:''});}}out.sort(function(a,b){return a.date<b.date?1:-1;});__fullRes=out.slice(0,300);}
+function psFromIdx(id){var mp=MAPBYID[id];if(mp)return mp;var m=SUMBYID&&SUMBYID[id];return {u:'https://blog.naver.com/bambooinvesting/'+id,t:m?m.t:('글 '+id),d:m?m.d:'',di:0,th:m?m.c:'',v:0};}
+function mbSnip(text,terms){if(!text)return '';var low=text.toLowerCase(),pos=-1;for(var i=0;i<terms.length;i++){var p=low.indexOf(terms[i]);if(p>=0&&(pos<0||p<pos))pos=p;}var st=pos<0?0:Math.max(0,pos-28);var seg=esc(text.slice(st,st+120).trim());for(var j=0;j<terms.length;j++){var t=terms[j];if(!t)continue;seg=seg.replace(new RegExp('('+t.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+')','ig'),'<b>$1</b>');}return (st>0?'…':'')+seg+'…';}
+function renderSearch(){var terms=(__curQ||'').toLowerCase().split(/\s+/).filter(Boolean);var shown={},items=[];
+  __titleRes.forEach(function(p){var id=pidOf(p.u);if(id&&!shown[id]){shown[id]=1;items.push(itemHTML(p,p.d+(p.v?' · 조회 '+p.v.toLocaleString():'')+' · '+esc(domName(p.di))+' › '+esc(p.th)+' <span class="mbtag">제목</span>'));}});
+  __sumRes.forEach(function(r){if(shown[r.id])return;shown[r.id]=1;items.push(itemHTML(psFromIdx(r.id),esc(r.date)+' · '+esc(r.cat)+' <span class="mbtag">요약</span><div class="msnip">'+mbSnip(r.summ,terms)+'</div>'));});
+  __fullRes.forEach(function(r){if(shown[r.id])return;shown[r.id]=1;items.push(itemHTML(psFromIdx(r.id),esc(r.date)+' · '+esc(r.cat)+' <span class="mbtag bdy">본문</span><div class="msnip">'+mbSnip(r.body,terms)+'</div>'));});
+  var ttl=Object.keys(shown).length;var bar='<div class="srchbar"><span>'+ttl.toLocaleString()+'편 일치</span>'+(FULL?'<span class="bdone">본문까지 검색됨</span>':'<button id="btnfull">📄 본문 전체로 더 찾기</button>')+'</div>';
+  plist.innerHTML=bar+(items.length?items.join(''):'<div style="padding:24px;color:var(--sub);text-align:center">검색 결과가 없습니다.</div>');
+  var bf=document.getElementById('btnfull');if(bf)bf.onclick=function(){bf.textContent='본문 불러오는 중…';bf.disabled=true;loadFull().then(function(){if(__curQ){searchFull();renderSearch();}});};}
+function augmentSummary(){var q=__curQ;loadSummary().then(function(){if(__curQ!==q)return;searchSummary();if(FULL)searchFull();renderSearch();}).catch(function(){});}
+/* ---- end hybrid search ---- */
 const KWS=['HBM','엔비디아','삼성전자','트럼프','중국','조선','방산','비트코인','금리','부동산','에이전트','로봇'];
 function chipRow(el){el.innerHTML=KWS.map(k=>`<span class="kw">${k}</span>`).join('');el.querySelectorAll('.kw').forEach((c,i)=>c.onclick=()=>{closeIntro();runSearch(KWS[i]);});}
 chipRow(document.getElementById('kwbar'));
